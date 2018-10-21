@@ -1,0 +1,2 @@
+# gas_news_reporter
+Google Apps ScriptとSpreadSheetでニュース通知を作るためのスクリプトです
