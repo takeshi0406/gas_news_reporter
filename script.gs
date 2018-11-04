@@ -10,7 +10,7 @@ function myFunction() {
     try {
       var latest_news = fetchLatestNews(config['title'],
          parsers[config['parser']], [config['feed']], config['charset'], i + 1);
-      postNews(latest_news, config['title'], config['endpoint']);
+      postNews(latest_news, config['title'], config['endpoint'], config['debug']);
     } catch (err) {
       errors.push(config["title"] + "のニュース通知で次のエラーが発生しました: " + new String(err));
     }
@@ -27,14 +27,25 @@ function createParsers() {
   var cells = sheet.getDataRange().getValues();
   // 1行目はヘッダーとして使いたいのでsliceで除去
   return cells.slice(1).reduce(function (result, row) {
-    result[row[0]] = createFetchFunction(
-      new RegExp(row[1], "i"),
-      new RegExp(row[2], "gi"),
-      new RegExp(row[3], "i"),
-      new RegExp(row[4], "i")
-    );
+    result[row[0]] = createParseMethod(row, row[0]);
     return result;
   }, {});
+}
+
+/**
+ * fetchするを作る。
+ * @param {Object} row 設定の一行
+ * @param {String} fetch_method fetch方法の指示
+ * @return {function(string, string): Array} ニュースをパースする関数
+ */
+function createParseMethod(row, fetch_method) {
+  // if (fetch_method.indexOf('func:') === 0) return FETCH_MODULE.refer(fetch_method);
+  return createFetchFunction(
+    new RegExp(row[1], "i"),
+    new RegExp(row[2], "gi"),
+    new RegExp(row[3], "i"),
+    new RegExp(row[4], "i")
+  );
 }
 
 /**
@@ -66,7 +77,8 @@ function readConfig() {
     return result;
   }, {});
   return readCells('config').map(function (row) {
-    return {'title': row[0], 'feed': row[1], 'parser': row[2], 'endpoint': channel[row[3]], 'charset': row[4], 'skip': (row[5] !== "")};
+    return {'title': row[0], 'feed': row[1], 'parser': row[2], 'endpoint': channel[row[3]], 'charset': row[4],
+            'skip': (row[5] !== ""), 'debug': (row[3] === '_debug')};
   });
 }
 
@@ -84,13 +96,14 @@ function readCells(sheetname) {
 
 /**
  * ニュースを通知する
- * @param {Array} 通知すべきニュースの配列
+ * @param {Array} news_list 通知すべきニュースの配列
  * @param {String} media ブログタイトルなど
  * @param {String} endpoint APIのURL
+ * @param {Boolean} debug trueの場合デバッグ中
  */
-function postNews(news_list, media, endpoint) {
+function postNews(news_list, media, endpoint, debug) {
   if (news_list.length === 0) return;
-  if (news_list.length >= 10) throw "「" + media + "」の通知が長すぎます"; 
+  if (!debug && news_list.length >= 10) throw "「" + media + "」の通知が長すぎます"; 
   news_list.forEach(function(news) {
     postSlack(media + ": " + news["title"] + "\n" + news["url"], endpoint);
   });
@@ -175,7 +188,7 @@ function createAbsUrl(url, path_or_url) {
     return protocol + '://' + base_url + path_or_url;
   } else {
     // index.htmlなどを除く
-    return url.replace(/\/([a-zA-Z0-9]+\.[a-z]+)?$/, '') + "/" + path_or_url;
+    return url.split("?")[0].replace(/\/([a-zA-Z0-9]+\.[a-z]+)?$/, '') + "/" + path_or_url;
   }
 }
 
@@ -238,6 +251,7 @@ function parseAllTags(html, regexp) {
  */
 function parseMatchedElement(html, regexp) {
   var match = regexp.exec(html);
+  Logger.log(match);
   if (!match) throw String(regexp) + 'にマッチする要素が見つかりませんでした';
   return match[1].replace(/^\s*(.*?)\s*$/, "$1"); // strip
 }
