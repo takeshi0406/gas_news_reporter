@@ -1,3 +1,6 @@
+const STORE_NUM = 100;
+const CHECK_NUM = 10;
+
 /**
  * 処理を実行する。
  * @throw クローリングで1つ以上エラーが発生した場合
@@ -39,7 +42,7 @@ function createParsers() {
  * @return {function(string, string): Array} ニュースをパースする関数
  */
 function createParseMethod(row, fetch_method) {
-  // if (fetch_method.indexOf('func:') === 0) return FETCH_MODULE.refer(fetch_method);
+  if (fetch_method.indexOf('func:') === 0) return FETCH_MODULE.refer(fetch_method);
   return createFetchFunction(
     new RegExp(row[1], "i"),
     new RegExp(row[2], "gi"),
@@ -103,7 +106,7 @@ function readCells(sheetname) {
  */
 function postNews(news_list, media, endpoint, debug) {
   if (news_list.length === 0) return;
-  if (!debug && news_list.length >= 10) throw "「" + media + "」の通知が長すぎます"; 
+  // if (!debug && news_list.length >= 10) throw "「" + media + "」の通知が長すぎます"; 
   news_list.forEach(function(news) {
     postSlack(media + ": " + news["title"] + "\n" + news["url"], endpoint);
   });
@@ -135,9 +138,9 @@ function postSlack(message, endpoint){
 function selectLatestNews(media, news_list, cell_idx) {
   var sheet = SpreadsheetApp.getActive().getSheetByName('log');
   var url_cell = sheet.getRange('B' + cell_idx);
-  var target_news = takeUntilLastNews(news_list, url_cell.getValues()[0][0]);
+  var [target_news, known_urls] = checkNewsCell(news_list, url_cell.getValues()[0][0]);
   if (target_news.length < 1) return [];
-  url_cell.setValues([[target_news[0]['url']]]);
+  url_cell.setValues([[known_urls]]);
   sheet.getRange('A' + cell_idx).setValues([[media]]);
   return target_news;
 }
@@ -145,17 +148,26 @@ function selectLatestNews(media, news_list, cell_idx) {
 /**
  * 既に投稿された最新のニュースが出るまでNewsを取得する。
  * @param {Array} news_list ページからパースした全てのニュースの配列
- * @param {String} latest_url 最新のニュースのURL
- * @return {Array} 通知すべきニュースの配列
+ * @param {String} urls_json 最新のニュースのURL
+ * @return {Array} 通知すべきニュースの配列, セルに保存する文字列
  */
-function takeUntilLastNews(news_list, latest_url) {
+function checkNewsCell(news_list, urls_json) {
   var result = [];
-  for (var i in news_list) {
+  var known_urls = urls_json ? JSON.parse(urls_json) : [];
+  var new_known_urls = news_list.concat(known_urls);
+  var knowns = known_urls.map(function(x) {
+    return x.url;
+  });
+  for (var i in news_list.slice(0, CHECK_NUM)) {
     var news = news_list[i];
-    if (news['url'] === latest_url) break;
-    result.push(news);
+    if (!knowns.includes(news.url)) result.push(news);
   };
-  return result;
+  return [
+    result,
+    JSON.stringify(new_known_urls.filter(function(elem, index, self) {
+      return self.indexOf(elem) === index;
+    }).slice(0, STORE_NUM))
+  ];
 }
 
 
@@ -251,7 +263,6 @@ function parseAllTags(html, regexp) {
  */
 function parseMatchedElement(html, regexp) {
   var match = regexp.exec(html);
-  Logger.log(match);
   if (!match) throw String(regexp) + 'にマッチする要素が見つかりませんでした';
   return match[1].replace(/^\s*(.*?)\s*$/, "$1"); // strip
 }
@@ -276,8 +287,7 @@ function parseMatchedElementIgnoreError(html, regexp) {
  * @todo 場当たり的でない良い実装を見つける
  */
 function parseToText(html) {
-  html = html.replace(/[ |　]+/g,' ');
-  html = html.replace(/\n+/g,'');
+  html = html.replace(/[ |　|\r|\n|\t]+/g,' ');
   html = html.replace('&#8217;', "'");
   return html.replace(/<("[^"]*"|'[^']*'|[^'">])*>/g,'');
 }
