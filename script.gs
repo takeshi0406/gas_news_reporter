@@ -4,11 +4,11 @@ const CHECK_NUM = 10;
 /**
  * 処理を実行する。
  * @throw クローリングで1つ以上エラーが発生した場合
- */ 
+ */
 function myFunction() {
   var parsers = createParsers();
   var errors = [];
-  readConfig().forEach(function(config, i) {
+  readConfig().reduceRight(function(_, config, i) {
     if (config['skip']) return;
     try {
       var latest_news = fetchLatestNews(config['title'],
@@ -17,7 +17,7 @@ function myFunction() {
     } catch (err) {
       errors.push(config["title"] + "のニュース通知で次のエラーが発生しました: " + new String(err));
     }
-  });
+  }, null);
   notifyErrors(errors);
 }
 
@@ -170,7 +170,6 @@ function checkNewsCell(news_list, urls_json) {
   ];
 }
 
-
 /**
  * クロール結果のURLを修正する。
  * @param {Array} news_list ニュースの配列
@@ -179,7 +178,13 @@ function checkNewsCell(news_list, urls_json) {
  */
 function fillUrls(news_list, url) {
   return news_list.map(function(dict) {
-    dict['url'] = createAbsUrl(url, dict['url']);
+    var decoded;
+    try {
+      decoded = decodeURI(dict['url']);
+    } catch(e) {
+      return url;
+    }
+    dict['url'] = createAbsUrl(url, encodeURI(decoded));
     return dict;
   });
 }
@@ -233,7 +238,9 @@ function createFetchFunction(table_regexp, row_regexp, title_regexp, url_regexp)
 function parseHtml(html, table_regexp, row_regexp, title_regexp, url_regexp) {
   var table = parseMatchedElement(html, table_regexp);
   var rows = parseAllTags(table, row_regexp);
-  return rows.map(function(row) {
+  return rows.map(function(row) { 
+    console.log(row);
+    console.log(parseMatchedElementIgnoreError(row, url_regexp));
     return {
       "title": parseToText(parseMatchedElement(row, title_regexp)),
       "url": parseMatchedElementIgnoreError(row, url_regexp),
