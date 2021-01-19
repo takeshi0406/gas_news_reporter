@@ -238,11 +238,11 @@ function createFetchFunction(table_regexp, row_regexp, title_regexp, url_regexp)
 function parseHtml(html, table_regexp, row_regexp, title_regexp, url_regexp) {
   var table = parseMatchedElement(html, table_regexp);
   var rows = parseAllTags(table, row_regexp);
-  return rows.map(function(row) { 
-    console.log(row);
+  return rows.map(function(row) {
+    console.log(parseToText(parseMatchedElement(row, title_regexp)));
     console.log(parseMatchedElementIgnoreError(row, url_regexp));
     return {
-      "title": parseToText(parseMatchedElement(row, title_regexp)),
+      "title": decodeTitle(parseToText(parseMatchedElement(row, title_regexp))),
       "url": parseMatchedElementIgnoreError(row, url_regexp),
     }
   });
@@ -335,4 +335,21 @@ function fetchLatestNews(media, fn, urls, charset, start_index) {
     var newarr = selectLatestNews(media, fn(url, charset), idx.toString());
     return result.concat(newarr);
   }, []);
+}
+
+/**
+ * タイトルをデコードする
+ * @param {String} text タイトル文字列
+ * @return {String} 文字列
+ */
+function decodeTitle(str) {
+  var re = /&#(x(\w+));/g;
+  return str.replace(re, function(m) {
+    if (typeof arguments[2] !== 'undefined') {
+      var cp = parseInt(arguments[2], 16);
+    } else {
+      var cp = parseInt(arguments[1], 10);
+    }
+    return String.fromCodePoint(cp);
+  }); 
 }
